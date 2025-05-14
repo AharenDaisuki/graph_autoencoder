@@ -8,18 +8,35 @@ import numpy as np
 import xml.etree.ElementTree as ET
 
 from glob import glob
-from utils import save_as_pkl
+from utils import save_as_pkl, clear_tmp_dir
 from multiprocessing.pool import ThreadPool
 
 TASK_SUCCESS = 0
 TASK_ERROR = -1
+
+ROADNETWORK_FILE = 'osm.net.xml'
+SUMOCONFIG_FILE = 'sim.sumocfg'
+DETECTOR_FILE = 'det.add.xml'
+DEMAND_FILE = 'trips.rou.xml'
+FLOW_FILE = 'flow.rou.xml'
+TAZ_FILE = 'taz.add.xml'
+FCD_FILE = 'fcd.xml'
+MEASUREMENT_FILE = 'detectors.xml'
+
+MATX_FILE = 'x.pkl'
+FLOW_FILE = 'q.pkl'
+DENSITY_FILE = 'k.pkl'
+VELOCITY_FILE = 'v.pkl'
+ASSIGNMENT_FILE = 'a.pkl'
+# DISTRIBUTION_FILE = 'dist.pkl'
+META_FILE = 'metadata.pkl'
 
 # setup: 
 ## 1. initialize traffic assignment zone
 ## 2. initialize detector layout
 ## 3. prepare road network
 
-def generate_od_matrix(matrix_dim, simulation_state, flow_save_dir, period=180):
+def generate_od_matrix(matrix_dim, simulation_state, flow_save_dir = None, period = 180):
     ''' generate od matrix numpy nd array for scenario A, state B and simulation C '''
 
     def generate_rou_file(filepath, matrix_dim, od_matrix, period=180):
@@ -52,10 +69,13 @@ def generate_od_matrix(matrix_dim, simulation_state, flow_save_dir, period=180):
     od_matrix = np.random.normal(loc = mu, scale = sigma, size = I * J * K)
     od_matrix = np.clip(od_matrix, a_min = x_min, a_max = x_max)
     od_matrix = od_matrix.reshape(matrix_dim)
+    mu = np.array(mu, dtype=np.float64).reshape(matrix_dim)
+    sigma = np.array(sigma, dtype=np.float64).reshape(matrix_dim)
     # generate sumo route
-    flow_file_path = os.path.join(flow_save_dir, 'flow.rou.xml')
-    generate_rou_file(filepath=flow_file_path, matrix_dim=matrix_dim, od_matrix=od_matrix, period=period)
-    return od_matrix, flow_file_path
+    flow_file_path = os.path.join(flow_save_dir, FLOW_FILE) if flow_save_dir else FLOW_FILE
+    if flow_save_dir: 
+        generate_rou_file(filepath=flow_file_path, matrix_dim=matrix_dim, od_matrix=od_matrix, period=period)
+    return od_matrix, mu, sigma, flow_file_path
 
 def od2routes(road_network, add_taz, od_demand, output_routes): 
     assert isinstance(road_network, str)
@@ -122,55 +142,50 @@ def sumo_simulation_task(*args):
             f.write('</configuration>\n')
         f.close()
     
-    def _clear_tmp_config(tmp_dir): 
-        try: 
-            shutil.rmtree(tmp_dir)
-        except FileNotFoundError:
-            assert False, f'Directory [{tmp_dir}] is not found!'
+    # def _clear_tmp_config(tmp_dir): 
+    #     try: 
+    #         shutil.rmtree(tmp_dir)
+    #     except FileNotFoundError:
+    #         assert False, f'Directory [{tmp_dir}] is not found!'
 
     # receive arguments
-    matrix_dim, simulation_scenario, simulation_state, simulation_index, simulation_args, link_hash = args
+    matrix_dim, simulation_dataset, simulation_state, simulation_scenario, simulation_index, simulation_args, link_hash = args
     assert simulation_state in [0, 1, 2]
     assert isinstance(simulation_index, int)
-    assert isinstance(simulation_scenario, str)
+    assert isinstance(simulation_scenario, int)
+    assert isinstance(simulation_dataset, str)
     assert isinstance(matrix_dim, tuple)
     assert isinstance(link_hash, dict)
     
     categories = ['low', 'medium', 'high']
-    ROADNETWORK_FILE = 'osm.net.xml'
-    SUMOCONFIG_FILE = 'sim.sumocfg'
-    DETECTOR_FILE = 'det.add.xml'
-    DEMAND_FILE = 'trips.rou.xml'
-    TAZ_FILE = 'taz.add.xml'
-    FCD_FILE = 'fcd.xml'
 
     try: 
         # create temporary directory
-        sim_tmp_dir = os.path.join(simulation_scenario, categories[simulation_state], str(simulation_index), 'tmp')
-        sim_dat_dir = os.path.join(simulation_scenario, categories[simulation_state], str(simulation_index), 'tmp', 'simulation')
-        output_dir  = os.path.join(simulation_scenario, categories[simulation_state], str(simulation_index))
+        sim_tmp_dir = os.path.join(simulation_dataset, categories[simulation_state], f'scenario_{simulation_scenario}', str(simulation_index), 'tmp')
+        sim_dat_dir = os.path.join(simulation_dataset, categories[simulation_state], f'scenario_{simulation_scenario}', str(simulation_index), 'tmp', 'simulation')
+        output_dir  = os.path.join(simulation_dataset, categories[simulation_state], f'scenario_{simulation_scenario}', str(simulation_index))
+        sim_scene_dir = os.path.join(simulation_dataset, categories[simulation_state], f'scenario_{simulation_scenario}')
         # clear cache
         if os.path.exists(sim_tmp_dir): 
-            _clear_tmp_config(sim_tmp_dir) 
+            clear_tmp_dir(sim_tmp_dir) 
         # make directory
         os.makedirs(sim_dat_dir)
-        assert os.path.exists(output_dir) and os.path.exists(sim_tmp_dir)
+        assert os.path.exists(output_dir) and os.path.exists(sim_tmp_dir) and os.path.exists(sim_scene_dir)
 
         # - output_dir
-        # --tmp
-            # -- osm.net.xml
-            # -- det.add.xml
-            # -- taz.add.xml
-            # -- flow.rou.xml
-            # -- trips.rou.xml
-            # -- sim.sumocfg
-            # -- simulation
+            # --tmp
+                # -- osm.net.xml
+                # -- det.add.xml
+                # -- taz.add.xml
+                # -- flow.rou.xml
+                # -- trips.rou.xml
+                # -- sim.sumocfg
                 # -- detectors.xml 
 
-        # -- q.pkl, k.pkl, v.pkl *
-        # -- fcd.xml * 
-        # -- alpha.pkl *
-        # -- x.pkl * 
+            # -- q.pkl, k.pkl, v.pkl *
+            # -- fcd.xml * 
+            # -- alpha.pkl *
+            # -- x.pkl * 
 
         # copy osm.net.xml
         orig_net_path = ROADNETWORK_FILE
@@ -188,7 +203,7 @@ def sumo_simulation_task(*args):
         shutil.copy(orig_taz_path, dest_taz_path)
 
         # generate trips.rou.xml
-        x, od_demand_file = generate_od_matrix(matrix_dim=matrix_dim, 
+        x, mu, sigma, od_demand_file = generate_od_matrix(matrix_dim=matrix_dim, 
                         simulation_state=simulation_state, 
                         flow_save_dir=sim_tmp_dir,
                         period=simulation_args.period)
@@ -208,7 +223,7 @@ def sumo_simulation_task(*args):
         simulator = SumoSimulation(simulation_args, link_hash=link_hash)
 
         q, k, v, a = simulator.run_sumo()
-        # TODO: feature normalization?
+        # TODO: maintain magnitude
         q_magnitude = np.linalg.norm(q)
         k_magnitude = np.linalg.norm(k)
         v_magnitude = np.linalg.norm(v)
@@ -218,18 +233,19 @@ def sumo_simulation_task(*args):
         normalized_k = k / k_magnitude
         normalized_v = v / v_magnitude
         normalized_x = x / x_magnitude
-        # normalized_a = np.zeros((I * J * K, L * T))
-        # for (i, j, k, l, t), alpha in a.items():
-        #     normalized_a[i * J + j * K + k, l * T + t] = alpha
+        sigma /= x_magnitude
+        mu /= x_magnitude
+        meta_data = {'q_mag': q_magnitude, 'k_mag': k_magnitude, 'v_mag': v_magnitude, 'x_mag': x_magnitude, 'mu': mu, 'sigma': sigma}
 
         # numpy nd array
-        save_as_pkl(normalized_q, pkl_path=os.path.join(output_dir, 'q.pkl'))
-        save_as_pkl(normalized_k, pkl_path=os.path.join(output_dir, 'k.pkl'))
-        save_as_pkl(normalized_v, pkl_path=os.path.join(output_dir, 'v.pkl'))
-        save_as_pkl(normalized_x, pkl_path=os.path.join(output_dir, 'x.pkl'))
-        save_as_pkl(a, pkl_path=os.path.join(output_dir, 'a.pkl'))
+        save_as_pkl(normalized_q, pkl_path=os.path.join(output_dir, FLOW_FILE))
+        save_as_pkl(normalized_k, pkl_path=os.path.join(output_dir, DENSITY_FILE))
+        save_as_pkl(normalized_v, pkl_path=os.path.join(output_dir, VELOCITY_FILE))
+        save_as_pkl(normalized_x, pkl_path=os.path.join(output_dir, MATX_FILE))
+        save_as_pkl(a, pkl_path=os.path.join(output_dir, ASSIGNMENT_FILE))
+        save_as_pkl(meta_data, pkl_path=os.path.join(output_dir, META_FILE)) # save meta data
 
-        _clear_tmp_config(tmp_dir = sim_tmp_dir)
+        clear_tmp_dir(tmp_dir = sim_tmp_dir)
         return TASK_SUCCESS
     except:
         assert False, 'Error!' 
@@ -328,27 +344,39 @@ class SumoSimulation(object):
                 tree = ET.parse(self.fcd_output)
                 root = tree.getroot()
                 tmp = {}
+                veh_total = {}
                 for time_step in root.iter('timestep'): 
                     time = float(time_step.get('time'))
                     t = int(time / self.period)
                     for vehicle in time_step.iter('vehicle'):       
                         id = vehicle.get('id')
+                        # ijk
+                        ijk = id.split('.')[0]
+                        o, d, k = int(ijk.split('-')[0]), int(ijk.split('-')[1]), int(ijk.split('-')[2])
+                        # n
+                        n = int(id.split('.')[1])
+                        # x_ijk = max{n}
+                        veh_total.setdefault((o, d, k), 0)
+                        veh_total[(o, d, k)] = max(veh_total[o, d, k], n+1)
+
                         edge = vehicle.get('lane')[:-2]
                         detector_id = f'det-{edge}'
                         if detector_id in self.link_hash: 
                             l = self.link_hash[detector_id]
                             tmp.setdefault((l, t), set())
-                            tmp[(l, t)].add(id)
+                            tmp[(l, t)].add((o, d, k, n))
                 alpha = {}
-                for (l, t), vehicles in tmp.items():
-                    vehicle_list = list(vehicles)
-                    for vehicle_id in vehicle_list: 
-                        ijk = vehicle_id.split('.')[0]
-                        o, d, k = int(ijk.split('-')[0]), int(ijk.split('-')[1]), int(ijk.split('-')[2])
+                for (l, t), vehicles_data in tmp.items():
+                    vehicle_list = list(vehicles_data)
+                    for data in vehicle_list: 
+                        # ijk = vehicle_id.split('.')[0]
+                        # o, d, k = int(ijk.split('-')[0]), int(ijk.split('-')[1]), int(ijk.split('-')[2])
+                        o, d, k, _ = data
                         alpha.setdefault((o, d, k, l, t), 0) 
                         alpha[(o, d, k, l, t)] += 1
                 for (o, d, k, l, t), val in alpha.items(): 
-                    alpha[(o, d, k, l, t)] = val / len(tmp[(l, t)])
+                    assert val <= veh_total[(o, d, k)]
+                    alpha[(o, d, k, l, t)] = val / veh_total[(o, d, k)]  
             return q_arr, k_arr, v_arr, alpha
 
         ''' simulation measurements: {q[l, k], k[l, k], v[l, k]} '''
@@ -388,24 +416,92 @@ class SumoSimulation(object):
         return self._extract_measurements(single_file_mode=True)
     
 class SumoParallelSimulationHandler(object): 
-    def __init__(self, sumo_sim_args, simulation_scenario: str, matrix_dim: tuple):
+    def __init__(self, sumo_sim_args, simulation_dataset: str, matrix_dim: tuple):
         self.sumo_sim_args = sumo_sim_args
-        self.simulation_scenario = simulation_scenario
+        self.simulation_dataset = simulation_dataset
         self.matrix_dim = matrix_dim
         self.link_hash = {}
+        self.link_n = 0
+        # warm up
+        self._sumo_simulation_warmup()
 
-        # link hash
-        hash_index = 0 
-        tree = ET.parse('det.add.xml') # NOTE: hard-code detector additional file
-        root = tree.getroot()
-        for detector in root.iter('inductionLoop'): 
-            link_id = detector.get('id')[:-2]
-            if self.link_hash.setdefault(link_id, -1) < 0: 
-                self.link_hash[link_id] = hash_index
-                hash_index += 1
+    def get_link_n(self) -> int: 
+        return self.link_n
 
-    def parallel_simulations(self, thread_n: int, simulation_n: int):
-        tasks = [(self.matrix_dim, self.simulation_scenario, state, index, self.sumo_sim_args, self.link_hash) for state in [0, 1, 2] for index in range(simulation_n)]
+    def _sumo_simulation_warmup(self):
+        ''' run a warm-up simulation to deploy detectors on road network and hash links with detectors '''
+        def deploy_detectors(osm_file, period, edge_set = None, filtered_length = 4.0):
+            ''' deploy detectors (period = x) for all edges longer than filtered_length ''' 
+            cnt = 0
+            with open(DETECTOR_FILE, 'w') as f: 
+                # write header
+                f.write('<?xml version="1.0" encoding="utf-8"?>\n') 
+                f.write('<additional xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/additional_file.xsd">\n')
+                # read roadnetwork
+                assert os.path.exists(osm_file), 'road network does not exist.'
+                tree = ET.parse(osm_file)
+                root = tree.getroot()
+                for edge in root.iter('edge'): 
+                    # skip internal
+                    if edge.get('function') == 'internal': 
+                        continue
+                    edge_id = edge.get('id')
+                    # skip remote edges
+                    if edge_set: 
+                        if edge_id not in edge_set: 
+                            continue
+                    # deploy detectors
+                    for lane in edge.iter('lane'): 
+                        lane_id_ = lane.get('id')
+                        len_ = float(lane.get('length'))
+                        detector_id_ = f'det-{lane_id_}'
+                        file_ = os.path.join('simulation', MEASUREMENT_FILE)
+                        if len_ > filtered_length: 
+                            f.write(f'\t<inductionLoop id="{detector_id_}" lane="{lane_id_}" pos="{float(len_/2)}" period="{period}" file="{file_}"/>\n')
+                    if len_ > filtered_length: 
+                        cnt += 1
+                f.write('</additional>\n')
+            f.close()
+            return cnt
+        
+        def link_hash(): 
+            # link hash
+            hash_index = 0 
+            tree = ET.parse(DETECTOR_FILE) 
+            root = tree.getroot()
+            for detector in root.iter('inductionLoop'): 
+                link_id = detector.get('id')[:-2]
+                if self.link_hash.setdefault(link_id, -1) < 0: 
+                    self.link_hash[link_id] = hash_index
+                    hash_index += 1
+            self.link_n = len(self.link_hash)
+        
+        print('sumo simulation warm up...')
+        # deploy detectors
+        deploy_detectors(osm_file = ROADNETWORK_FILE, period = 30.0)
+        link_hash()
+        # warm up
+        tmp_dir = 'sim_warmup'
+        edge_set = set()
+        for simulation_state in [0, 1, 2]: 
+            sumo_simulation_task(self.matrix_dim, tmp_dir, simulation_state, 0, 0, self.sumo_sim_args, self.link_hash)
+        for fcd_path in glob(os.path.join(tmp_dir, '*', '*', '*', FCD_FILE)): 
+            tree = ET.parse(fcd_path)
+            root = tree.getroot()
+            for time_step in root.iter('timestep'): 
+                for vehicle in time_step.iter('vehicle'):       
+                    edge_id = vehicle.get('lane')[:-2]
+                    edge_set.add(edge_id)
+        deploy_detectors(osm_file = ROADNETWORK_FILE, period = 30.0, edge_set = edge_set)
+        link_hash()
+        clear_tmp_dir(tmp_dir = tmp_dir)
+
+    def parallel_simulations(self, thread_n: int, scenario_n: int, simulation_n: int):
+        simulation_states = [0, 1, 2]
+        tasks = [(self.matrix_dim, self.simulation_dataset, state, scenario, index, self.sumo_sim_args, self.link_hash) 
+                 for state in simulation_states 
+                 for scenario in range(scenario_n) 
+                 for index in range(simulation_n)]
         print(f'# of tasks: {len(tasks)}')
         with ThreadPool(min(thread_n, len(tasks))) as pool: 
             pool.starmap(func=sumo_simulation_task, iterable=tasks, chunksize=1)
@@ -426,5 +522,5 @@ if __name__ == '__main__':
     taz_n = 10 # TODO: check number of taz
     matrix_dim = (taz_n, taz_n, (args.duration // args.period))
     # configs
-    simulation_handler = SumoParallelSimulationHandler(sumo_sim_args=args, simulation_scenario='scenario_0', matrix_dim=matrix_dim)
+    simulation_handler = SumoParallelSimulationHandler(sumo_sim_args=args, simulation_dataset='sim_dataset_0', matrix_dim=matrix_dim)
     simulation_handler.parallel_simulations(thread_n=10, simulation_n=1000)
