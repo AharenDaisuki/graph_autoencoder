@@ -28,7 +28,7 @@ FLOW_FILE = 'q.pkl'
 DENSITY_FILE = 'k.pkl'
 VELOCITY_FILE = 'v.pkl'
 ASSIGNMENT_FILE = 'a.pkl'
-# DISTRIBUTION_FILE = 'dist.pkl'
+DISTRIBUTION_FILE = 'dist.pkl'
 META_FILE = 'metadata.pkl'
 
 # setup: 
@@ -57,10 +57,10 @@ def generate_od_matrix(matrix_dim, simulation_state, flow_save_dir = None, perio
     assert simulation_state in [0, 1, 2] # 0 => low, 1 => medium, 2 => high
     I, J, K = matrix_dim 
     # TODO: hard-code distribution parameters
-    means = [5, 10, 20]
-    stds = [1, 3, 6]
+    means = [10, 20, 40]
+    stds = [3, 5, 10]
     node_state_prob = [[0.6, 0.3, 0.1], [0.2, 0.6, 0.2], [0.1, 0.3, 0.6]] 
-    x_min, x_max = 1.0, 40.0
+    x_min, x_max = 1.0, 70.0
 
     # generate od matrix
     node_state  = np.random.choice(a = [0, 1, 2], size = I * J * K, p = node_state_prob[simulation_state])
@@ -149,13 +149,14 @@ def sumo_simulation_task(*args):
     #         assert False, f'Directory [{tmp_dir}] is not found!'
 
     # receive arguments
-    matrix_dim, simulation_dataset, simulation_state, simulation_scenario, simulation_index, simulation_args, link_hash = args
+    matrix_dim, simulation_dataset, simulation_state, simulation_scenario, simulation_index, simulation_args, link_hash, normalized = args
     assert simulation_state in [0, 1, 2]
     assert isinstance(simulation_index, int)
     assert isinstance(simulation_scenario, int)
     assert isinstance(simulation_dataset, str)
     assert isinstance(matrix_dim, tuple)
     assert isinstance(link_hash, dict)
+    assert isinstance(normalized, bool)
     
     categories = ['low', 'medium', 'high']
 
@@ -223,32 +224,32 @@ def sumo_simulation_task(*args):
         simulator = SumoSimulation(simulation_args, link_hash=link_hash)
 
         q, k, v, a = simulator.run_sumo()
-        # TODO: maintain magnitude
-        q_magnitude = np.linalg.norm(q)
-        k_magnitude = np.linalg.norm(k)
-        v_magnitude = np.linalg.norm(v)
-        x_magnitude = np.linalg.norm(x)
-        assert q_magnitude > 0 and k_magnitude > 0 and v_magnitude > 0 and x_magnitude > 0
-        normalized_q = q / q_magnitude
-        normalized_k = k / k_magnitude
-        normalized_v = v / v_magnitude
-        normalized_x = x / x_magnitude
-        sigma /= x_magnitude
-        mu /= x_magnitude
-        meta_data = {'q_mag': q_magnitude, 'k_mag': k_magnitude, 'v_mag': v_magnitude, 'x_mag': x_magnitude, 'mu': mu, 'sigma': sigma}
+        if normalized: 
+            q_magnitude = np.linalg.norm(q)
+            k_magnitude = np.linalg.norm(k)
+            v_magnitude = np.linalg.norm(v)
+            x_magnitude = np.linalg.norm(x)
+            assert q_magnitude > 0 and k_magnitude > 0 and v_magnitude > 0 and x_magnitude > 0
+            q = q / q_magnitude
+            k = k / k_magnitude
+            v = v / v_magnitude
+            x = x / x_magnitude
+            meta_data = {'q_mag': q_magnitude, 'k_mag': k_magnitude, 'v_mag': v_magnitude, 'x_mag': x_magnitude}
+            save_as_pkl(meta_data, pkl_path=os.path.join(output_dir, META_FILE)) 
+        
+        dist_data = {'mu': mu, 'sigma': sigma}
 
         # numpy nd array
-        save_as_pkl(normalized_q, pkl_path=os.path.join(output_dir, FLOW_FILE))
-        save_as_pkl(normalized_k, pkl_path=os.path.join(output_dir, DENSITY_FILE))
-        save_as_pkl(normalized_v, pkl_path=os.path.join(output_dir, VELOCITY_FILE))
-        save_as_pkl(normalized_x, pkl_path=os.path.join(output_dir, MATX_FILE))
+        save_as_pkl(q, pkl_path=os.path.join(output_dir, FLOW_FILE))
+        save_as_pkl(k, pkl_path=os.path.join(output_dir, DENSITY_FILE))
+        save_as_pkl(v, pkl_path=os.path.join(output_dir, VELOCITY_FILE))
+        save_as_pkl(x, pkl_path=os.path.join(output_dir, MATX_FILE))
         save_as_pkl(a, pkl_path=os.path.join(output_dir, ASSIGNMENT_FILE))
-        save_as_pkl(meta_data, pkl_path=os.path.join(output_dir, META_FILE)) # save meta data
+        save_as_pkl(dist_data, pkl_path=os.path.join(sim_scene_dir, DISTRIBUTION_FILE)) # distribution data
 
         clear_tmp_dir(tmp_dir = sim_tmp_dir)
         return TASK_SUCCESS
     except:
-        assert False, 'Error!' 
         return TASK_ERROR
 
 class SumoSimulation(object): 
@@ -430,7 +431,7 @@ class SumoParallelSimulationHandler(object):
 
     def _sumo_simulation_warmup(self):
         ''' run a warm-up simulation to deploy detectors on road network and hash links with detectors '''
-        def deploy_detectors(osm_file, period, edge_set = None, filtered_length = 4.0):
+        def deploy_detectors(osm_file, period, edge_set = None, filtered_length = 0.0):
             ''' deploy detectors (period = x) for all edges longer than filtered_length ''' 
             cnt = 0
             with open(DETECTOR_FILE, 'w') as f: 
@@ -483,8 +484,9 @@ class SumoParallelSimulationHandler(object):
         # warm up
         tmp_dir = 'sim_warmup'
         edge_set = set()
+        is_normalized = False
         for simulation_state in [0, 1, 2]: 
-            sumo_simulation_task(self.matrix_dim, tmp_dir, simulation_state, 0, 0, self.sumo_sim_args, self.link_hash)
+            sumo_simulation_task(self.matrix_dim, tmp_dir, simulation_state, 0, 0, self.sumo_sim_args, self.link_hash, is_normalized)
         for fcd_path in glob(os.path.join(tmp_dir, '*', '*', '*', FCD_FILE)): 
             tree = ET.parse(fcd_path)
             root = tree.getroot()
@@ -492,13 +494,13 @@ class SumoParallelSimulationHandler(object):
                 for vehicle in time_step.iter('vehicle'):       
                     edge_id = vehicle.get('lane')[:-2]
                     edge_set.add(edge_id)
-        deploy_detectors(osm_file = ROADNETWORK_FILE, period = 30.0, edge_set = edge_set)
+        deploy_detectors(osm_file = ROADNETWORK_FILE, period = 30.0, edge_set = edge_set, filtered_length = 2.0)
         link_hash()
         clear_tmp_dir(tmp_dir = tmp_dir)
 
-    def parallel_simulations(self, thread_n: int, scenario_n: int, simulation_n: int):
+    def parallel_simulations(self, thread_n: int, scenario_n: int, simulation_n: int, normalized: bool):
         simulation_states = [0, 1, 2]
-        tasks = [(self.matrix_dim, self.simulation_dataset, state, scenario, index, self.sumo_sim_args, self.link_hash) 
+        tasks = [(self.matrix_dim, self.simulation_dataset, state, scenario, index, self.sumo_sim_args, self.link_hash, normalized) 
                  for state in simulation_states 
                  for scenario in range(scenario_n) 
                  for index in range(simulation_n)]
@@ -523,4 +525,4 @@ if __name__ == '__main__':
     matrix_dim = (taz_n, taz_n, (args.duration // args.period))
     # configs
     simulation_handler = SumoParallelSimulationHandler(sumo_sim_args=args, simulation_dataset='sim_dataset_0', matrix_dim=matrix_dim)
-    simulation_handler.parallel_simulations(thread_n=10, simulation_n=1000)
+    simulation_handler.parallel_simulations(thread_n=10, simulation_n=1000, normalized=True)
