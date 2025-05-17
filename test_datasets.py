@@ -3,7 +3,7 @@ import unittest
 import torch_geometric.transforms as T
 
 from unittest import TestCase
-from datasets import get_sumo_dataloader
+from datasets import get_sumo_trainloader
 from torch_geometric.nn.conv.gcn_conv import gcn_norm
 
 class TestSumoDataLoader(TestCase): 
@@ -11,8 +11,8 @@ class TestSumoDataLoader(TestCase):
         self.assertEqual(torch.cuda.is_available(), True)
 
     def test_get_sumo_trainloader(self): 
-        dataloader = get_sumo_dataloader(data_dir='scenario_test', batch_size=1, shuffle=True)
-        for data in dataloader: 
+        dataloader = get_sumo_trainloader(data_dir='sim_dataset_test', batch_size=1, shuffle=True, swap_prob=0.3)
+        for data in dataloader:
             # unidirected graph
             data = T.ToUndirected()(data)
             del data['measurement', 'rev_contributes_to', 'demand'].edge_label
