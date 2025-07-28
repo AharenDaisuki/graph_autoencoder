@@ -56,8 +56,19 @@ SUMO_STEP_LENGTH = 2.0
 LINK_MIN_LENGTH = 2.0
 LINK_MAX_NUM = 200
 
-def generate_od_matrix(matrix_dim, simulation_state, flow_save_dir = None, period = 180):
-    ''' generate od matrix numpy nd array for scenario A, state B and simulation C '''
+def generate_od_matrix(matrix_dim, simulation_state, flow_save_dir = None, period: int = 180):
+    """
+    Generate od matrix in some certain scenario H for the specific simulation S. 
+
+    Args: 
+        matrix_dim (tuple): dimension of demand matrix.
+        simulation_state (int): simulation state (``0`` for low demand state, ``1`` for medium demand state and ``2`` for high demand state).
+        flow_save_dir (str, optional): ``flow.rou.xml`` save path. ``None`` if no need to save.
+        period (int, optional): interval length in seconds for estimation (default: ``180``).
+
+    Returns: 
+        tuple[ndarray[Any, dtype[float64]], ndarray[Any, dtype[floating[_64Bit]]], ndarray[Any, dtype[floating[_64Bit]]], str]: demand matrix, distribution mean, distribution standard deviation, file save path.
+    """
 
     def generate_rou_file(filepath, matrix_dim, od_matrix, period):
         ''' generate sumo route file''' 
@@ -138,6 +149,19 @@ def od2routes(road_network, add_taz, od_demand, output_routes):
 #     return obj
 
 def sumo_simulation_task(*args):
+    """
+    Execute a SUMO simulation tasks. :func:`sumo_simulation_task` takes several arguments as inputs, 
+    including dimension of demand matrix, simulation arguments, save path of simulation results, etc., 
+    randomly sampling demand matrix for the simulation from a certain distribution, running SUMO simulation
+    and saving the simulation results to the specified directory. 
+
+    For details about generating demand matrix, see the function :func:`generate_od_matrix`.
+
+    Args:
+
+    Returns: 
+        int: task finish code (``0`` for success, ``-1`` for error)
+    """
     def _make_tmp_config(config_path, duration):
         with open(config_path, 'w') as f: 
             f.write('<?xml version="1.0" encoding="UTF-8"?>\n')
@@ -277,7 +301,16 @@ def sumo_simulation_task(*args):
         return TASK_ERROR
 
 class SumoSimulation(object): 
-    def __init__(self, args, link_hash=None):
+    r"""
+    Sumo simulator runs SUMO based on simulation arguments and returns simulation results including 
+    traffic flow, velocity, density and assignment matrix (DAR). 
+
+    Args:
+        sumo_sim_args: simulation arguments. 
+        link_hash: hash table of all links in the road networks. 
+    """
+    def __init__(self, sumo_sim_args, link_hash=None):
+        args = sumo_sim_args
         self.duration   = args.duration
         self.period     = args.period
         self.data_dir   = args.data
@@ -462,9 +495,19 @@ class SumoSimulation(object):
         return self._extract_measurements(single_file_mode=True, save_fcd=save_fcd)
     
 class SumoParallelSimulationHandler(object): 
-    def __init__(self, sumo_sim_args, simulation_dataset: str, matrix_dim: tuple):
+    r"""
+    Sumo parallel simulation handler executes multiple :func:`sumo_simulation_task` in parallel. 
+
+    For more details, see the function :func:`sumo_simulation_task`.
+
+    Args:
+        sumo_sim_args: simulation arguments. 
+        data_dir (str): directory of data.
+        matrix_dim (tuple): dimension of demand matrix. 
+    """
+    def __init__(self, sumo_sim_args, data_dir: str, matrix_dim: tuple):
         self.sumo_sim_args = sumo_sim_args
-        self.simulation_dataset = simulation_dataset
+        self.simulation_dataset = data_dir
         self.matrix_dim = matrix_dim
         self.link_hash = {}
         self.link_n = 0

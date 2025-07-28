@@ -13,25 +13,77 @@ from gurobipy import *
 
 # root mean square error
 def rmse_loss(pred: Tensor, target: Tensor): 
+    """
+    Root mean square error loss.
+
+    Args: 
+        pred (Tensor): prediction tensor.
+        target (Tensor): ground truth tensor.
+
+    Returns: 
+        Tensor: loss tensor 
+    """
     assert pred.shape == target.shape
     return F.mse_loss(pred, target).sqrt()
 
 def nrmse_loss(pred: Tensor, target: Tensor): 
+    """
+    Normalized root mean square error loss.
+
+    Args: 
+        pred (Tensor): prediction tensor.
+        target (Tensor): ground truth tensor.
+    
+    Returns: 
+        Tensor: loss tensor
+    """
     assert pred.shape == target.shape
     target_range = torch.max(target) - torch.min(target)
     return F.mse_loss(pred, target).sqrt() / target_range
 
 # huber loss
 def huber_loss(pred: Tensor, target: Tensor, delta: float = 0.25): 
+    """
+    Huber loss.
+
+    Args: 
+        pred (Tensor): prediction tensor.
+        target (Tensor): ground truth tensor.
+        delta (float): threshold (default: ``0.25``)
+
+    Returns: 
+        Tensor: loss tensor
+    """
     assert pred.shape == target.shape
     return F.huber_loss(pred, target, reduction='mean', delta=delta)
 
 # pinball loss
 def pinball_loss(pred: Tensor, target: Tensor, tau: float): 
+    """
+    Pinball loss for quantile regression.
+
+    Args: 
+        pred (Tensor): prediction tensor.
+        target (Tensor): ground truth tensor.
+        tau (float): threshold
+
+    Returns: 
+        Tensor: loss tensor
+    """
     assert pred.shape == target.shape
     return torch.mean(torch.max((tau - 1) * (target - pred), tau * (target - pred)))
 
 def node_v_recon_loss(data: HeteroData, alphas: Tensor):
+    """
+    Node reconstruction loss (v set) for a bipartite graph.
+
+    Args: 
+        data (HeteroData): bipartite graph input.
+        alphas (Tensor): prediction of edge weights.
+
+    Returns: 
+        Tensor: loss tensor
+    """
     # u, v set
     x = data['demand'].x_origin.unsqueeze(1)
     y = data['measurement'].x_origin.unsqueeze(1)
@@ -49,6 +101,16 @@ def node_v_recon_loss(data: HeteroData, alphas: Tensor):
     # return huber_loss(y_pred, y, delta=30.0)
 
 def node_u_recon_loss(data: HeteroData, alphas: Tensor): 
+    """
+    Node reconstruction loss (u set) for a bipartite graph.
+
+    Args: 
+        data (HeteroData): bipartite graph input.
+        alphas (Tensor): prediction of edge weights.
+
+    Returns: 
+        Tensor: loss tensor
+    """
     # vector x [n \times 1], y [m \times 1]
     x = data['demand'].x_origin.unsqueeze(1) 
     y = data['measurement'].x_origin.unsqueeze(1)

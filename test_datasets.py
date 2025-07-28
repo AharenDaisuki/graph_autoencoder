@@ -59,7 +59,7 @@ class TestSumoDataLoader(TestCase):
         print(quantile_)
 
     def test_3_get_sumo_dataloader(self): 
-        train_loader, test_loader = get_sumo_dataloaders(data_dir='sim_dataset_v2')
+        train_loader, test_loader, _, _ = get_sumo_dataloaders(data_dir='sim_dataset_v2')
         train_quantile = [0] * 10
         test_quantile = [0] * 10
         train_sample = 0

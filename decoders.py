@@ -2,6 +2,12 @@ import torch
 import torch.nn as nn
      
 class Decoder_bipartite(nn.Module): 
+    """
+    Base decoder for graph autoencoders.
+
+    Args: 
+        hidden_channels (int): number of hidden channels
+    """
     def __init__(self, hidden_channels):
         super().__init__()
         self.lin1 = torch.nn.Linear(2 * hidden_channels, hidden_channels)

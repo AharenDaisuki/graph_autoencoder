@@ -22,6 +22,9 @@ def seed_torch(seed: int):
     torch.cuda.manual_seed_all(seed)
 
 class TrainerBase(object):
+    """
+    Trainer base class. 
+    """
     def __init__(self):
         pass 
 
@@ -389,6 +392,9 @@ class Trainer_blp_node_recon(Trainer_blp):
         return train_loss_list, test_loss_list, val_loss_list, node_loss_list
   
 class Trainer_blp_structured_node_recon(Trainer_blp_node_recon): 
+    """
+    Trainer for bipartite graph autoencoder.  
+    """
     def __init__(self):
         super(Trainer_blp_node_recon, self).__init__()
 
@@ -544,7 +550,7 @@ class Trainer_blp_structured_node_recon(Trainer_blp_node_recon):
         # model & optimizer & data loader
         model = Bipartite_link_pred(hidden_channels=hidden_channels, out_channels=out_channels).to(device)
         optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
-        train_loader, test_loader = get_sumo_dataloaders(data_dir=dataset)
+        train_loader, test_loader, _, _ = get_sumo_dataloaders(data_dir=dataset)
         # resume?
         if resume: 
             resume_checkpoint = torch.load(resume)

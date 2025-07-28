@@ -2,14 +2,21 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from encoders import Encoder_GNN_u_weighted, Encoder_GNN_v_weighted, Encoder_GNN_two_hop, Encoder_GNN_2hop_v2
+from encoders import Encoder_GNN_u_weighted, Encoder_GNN_v_weighted
 from decoders import Decoder_bipartite
 from torch_geometric.nn import to_hetero
 from torch_geometric.nn.models.autoencoder import GAE
 from torch_geometric.nn.conv import GraphConv, SAGEConv, GATConv, GCNConv
     
 class Bipartite_link_pred(nn.Module): 
-    def __init__(self, hidden_channels, out_channels):
+    """
+    Graph autoencoder for bipartite graph link regression.
+
+    Args: 
+        hidden_channels (int): number of hidden channels
+        out_channels (int): number of output channels
+    """
+    def __init__(self, hidden_channels: int, out_channels: int):
         super().__init__()
         self.user_emb = nn.Embedding(2000, hidden_channels) # TODO: hard code
         self.user_encoder = Encoder_GNN_u_weighted(hidden_channels, out_channels, gconv=GraphConv)
@@ -17,6 +24,9 @@ class Bipartite_link_pred(nn.Module):
         self.decoder = Decoder_bipartite(out_channels)
 
     def forward(self, x_dict, edge_index_dict, edge_label_index, edge_weight = None):
+        """
+        
+        """
         z_dict = {}
         x_dict['demand'] = self.user_emb(x_dict['demand'])
         # if edge_weight is not None: 
@@ -56,13 +66,13 @@ class Bipartite_LinkQuantileRegression_GAE(nn.Module):
         a_3 = self.decoder(z_3['demand'], z_3['measurement'], edge_label_index)
         return a_1, a_2, a_3
     
-class Bipartite_link_pred_2hop(nn.Module): 
-    def __init__(self, hidden_channels: int, out_channels: int, layer_n: int, alpha: float = None, dropout: float = None):
-        super(Bipartite_link_pred_2hop, self).__init__()
-        self.encoder = Encoder_GNN_2hop_v2(hidden_channels, out_channels, layer_n, alpha=alpha, dropout=dropout)
-        self.decoder = Decoder_bipartite(out_channels)
+# class Bipartite_link_pred_2hop(nn.Module): 
+#     def __init__(self, hidden_channels: int, out_channels: int, layer_n: int, alpha: float = None, dropout: float = None):
+#         super(Bipartite_link_pred_2hop, self).__init__()
+#         self.encoder = Encoder_GNN_2hop_v2(hidden_channels, out_channels, layer_n, alpha=alpha, dropout=dropout)
+#         self.decoder = Decoder_bipartite(out_channels)
 
-    def forward(self, x_dict, edge_index_dict, edge_label_index, edge_weight = None): 
-        z_dict = {}
-        z_dict['demand'], z_dict['measurement'] = self.encoder(x_dict, edge_index_dict, edge_weight)
-        return self.decoder(z_dict['demand'], z_dict['measurement'], edge_label_index)
+#     def forward(self, x_dict, edge_index_dict, edge_label_index, edge_weight = None): 
+#         z_dict = {}
+#         z_dict['demand'], z_dict['measurement'] = self.encoder(x_dict, edge_index_dict, edge_weight)
+#         return self.decoder(z_dict['demand'], z_dict['measurement'], edge_label_index)

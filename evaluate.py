@@ -25,6 +25,20 @@ from torch_geometric.data import HeteroData
 from torch_geometric.nn.conv.gcn_conv import gcn_norm
 
 def reconstruct_graph(index: int, data: HeteroData, alpha: Tensor, u_dim: tuple, v_dim: tuple, save_dir = 'tmp'): 
+    """
+    Reconstruct the original bipartite graph. 
+
+    Args: 
+        index (int): graph index.
+        data (HeteroData): the original bipartite graph. 
+        alpha (Tensor): prediction of edge weights.
+        u_dim (tuple): dimension of u set features in bipartite graph. 
+        v_dim (tuple): dimension of v set features in bipartite graph.
+        save_dir (str, Optional): save the evaluation results in this directory 
+
+    Returns: 
+        tuple[Tensor, NDArray[floating[_64Bit]], NDArray[floating[Any]]]: prediction loss, od demand ground truth, od demand prediction.
+    """
     def reconstruct_node(alpha: np.ndarray, adj: np.ndarray, x_vec: np.ndarray, y_vec: np.ndarray):
         # def map_ijk(index):
         #     # i = (index // (J_ * K_))
@@ -174,6 +188,18 @@ def reconstruct_graph(index: int, data: HeteroData, alpha: Tensor, u_dim: tuple,
     return loss, x_true, x_pred
 
 def reconstruct_traffic(index: int, x_pred: np.array, x_true: np.array, matrix_dim: tuple, sim_tmp_dir: str, simulation_args):
+    """
+    Reconstruct traffic flow in accordance to od demand matrix estimation. 
+
+    Args: 
+        index (int): graph index.
+        x_pred (ndarray): od demand matrix estimation. 
+        x_true (ndarray): od demand matrix ground truth.
+        matrix_dim (tuple): dimension of od demand matrix. 
+        sim_tmp_dir (str): temporary directory for saving simulation results.
+        simulation_args: simulation arguments.  
+    """
+
     def generate_rou_file(filepath, matrix_dim, od_matrix, period):
         ''' generate sumo route file ''' 
         with open(filepath, 'w') as f:

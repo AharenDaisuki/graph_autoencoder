@@ -162,7 +162,19 @@ def get_sumo_trainloader(data_dir: str, batch_size: int = 1, shuffle: bool = Tru
     print(f'[summary] #node_u: {num_node_u} | #node_v: {num_node_v} | #node_total: {num_node_u + num_node_v} | #edges: {num_edges} | #graphs: {num_graphs} | avg_density: {round(100 * avg_density, 4)}%\n')
     return DataLoader(data_list, batch_size = batch_size, shuffle = shuffle), (I, J, K), (L, T)
 
-def get_sumo_dataloaders(data_dir: str, batch_size: int = 1, shuffle: bool = True, train_test_split = 0.9):
+def get_sumo_dataloaders(data_dir: str, batch_size: int = 1, shuffle: bool = True, train_test_split: float = 0.9):
+    """
+    Get train data loader and test data loader.
+
+    Args:
+        data_dir (str): directory of data.
+        batch_size (int, optional): how many samples per batch to load (default: ``1``).
+        shuffle (bool, optional): set to ``True`` to have the data reshuffled at every epoch (default: ``False``).
+        train_test_split (float, optional): ratio of training samples in dataset (default: ``0.9``).
+
+    Returns:
+        tuple[DataLoader, DataLoader, tuple[Unbound | int, Unbound | int, Unbound | int], tuple[Unbound | int, Unbound | int]]: train data loader, test data loader, shape of demand matrix, shape of measurement matrix.
+    """
     def _check_data_integrity(folder):
         all_files = [os.path.join(folder, raw_file) for raw_file in raw_files]
         return all([os.path.exists(file) for file in all_files]) 

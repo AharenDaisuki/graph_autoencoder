@@ -18,7 +18,17 @@ from scipy.stats import pearsonr
 #     plt.close()
 
 def plot_pearson_correlation_scatter_arr(array_x: np.array, array_y: np.array, upper: float = None, savefig = 'pearsons.png', xlabel = 'Prediction', ylabel = 'Ground Truth'): 
-    ''' array_x: ground truth, array_y: prediction '''
+    """
+    Draw a scatter plot and calculate pearson correlation.
+
+    Args: 
+        array_x (ndarray): numpy array of ground truth.
+        array_y (ndarray): numpy array of prediction.
+        upper (float, Optional): upperbound of numpy array values (Default: ``None``).
+        savefig (str, Optional): image save path.
+        xlabel (str, Optional): label of x axis. 
+        ylabel (str, Optional): label of y axis.
+    """
     assert array_x.shape == array_y.shape, f'{array_x.shape} | {array_y.shape}'
     r2 = pearsonr(array_x, array_y)
     if upper is None: 
@@ -60,7 +70,17 @@ def plot_pearson_correlation_scatter_lis(array_x: list, array_y: list, upper: fl
     plt.close()
 
 def plot_line_chart(array_x: np.array, array_y_upper: np.array, array_y_lower: np.array, savefig = 'demand.png', xlabel = 'Time interval', ylabel = 'Traffic demand (unit: veh/h)'): 
-    ''' array x: true, array y: prediction '''
+    """
+    Draw a line chart for time-series predictions of each od pair.
+
+    Args: 
+        array_x (ndarray): numpy array of ground truth.
+        array_y_upper (ndarray): numpy array of prediction.
+        array_y_lower (ndarray): numpy array of prediction lowerbound.
+        savefig (str, Optional): image save path.
+        xlabel (str, Optional): label of x axis. 
+        ylabel (str, Optional): label of y axis.
+    """
     assert len(array_x) == len(array_y_upper), f'{len(array_x)} | {len(array_y_upper)}'
     # true
     plt.plot(range(len(array_x)), array_x, marker='^', color = 'red', label = 'GT')  
@@ -85,6 +105,15 @@ def plot_histogram(array_x: np.array, bin_n: int, range: tuple, savefig='hist.pn
     plt.close()
 
 def plot_historical_loss(x, y_list, label_list, savefig = 'historical_loss.png'):
+    """
+    Visualize historical training and testing losses.
+
+    Args: 
+        x (List): list of training epochs.
+        y_list (List): list of loss values.
+        label_list (List): list of loss labels.
+        savefig (str, Optional): image save path.
+    """
     for idx, y in enumerate(y_list): 
         plt.plot(x, y, 'o-', label = label_list[idx]) 
     plt.ylabel('loss')
